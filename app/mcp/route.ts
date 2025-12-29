@@ -1,6 +1,8 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { spawn } from "child_process";
+import path from "path";
+import fs from "fs";
 
 export const runtime = "nodejs";
 
@@ -8,19 +10,31 @@ const handler = createMcpHandler(
   async (server) => {
     server.tool(
       "do-nuclei",
-      "Execute Nuclei, an advanced vulnerability scanner using YAML templates. Runs the nuclei binary inside the container and returns the raw output.",
+      "Execute Nuclei, an advanced vulnerability scanner using YAML templates. Runs the nuclei binary bundled with the deployment and returns the raw output.",
       {
         url: z.string().url().describe("Target URL to scan with nuclei"),
         tags: z.array(z.string()).optional().describe("Comma-separated tags list; e.g. [\"cves\", \"exposures\"]"),
       },
       async ({ url, tags }) => {
+        const nucleiPath = path.join(process.cwd(), "bin", "nuclei");
+        if (!fs.existsSync(nucleiPath)) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "nuclei binary not found in ./bin. Please redeploy to fetch it.",
+              },
+            ],
+          };
+        }
+
         const args: string[] = ["-u", url, "-silent"];
         if (tags && tags.length > 0) {
           args.push("-tags", tags.join(","));
         }
 
         return new Promise((resolve, reject) => {
-          const proc = spawn("nuclei", args, { env: process.env });
+          const proc = spawn(nucleiPath, args, { env: process.env });
           let stdout = "";
           let stderr = "";
 
